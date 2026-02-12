@@ -1,0 +1,20 @@
+{
+  "name": "claw-valentine-card",
+  "version": "1.0.0",
+  "description": "Send Valentine's Day cards with poems and USDC payments via Coinbase CDP",
+  "main": "index.js",
+  "bin": {
+    "claw-valentine": "./cli.js"
+  },
+  "scripts": {
+    "send": "node cli.js"
+  },
+  "dependencies": {
+    "@coinbase/agentkit": "^0.1.0",
+    "viem": "^2.0.0",
+    "dotenv": "^16.4.0"
+  },
+  "keywords": ["valentine", "usdc", "coinbase", "cdp", "agentkit", "claw"],
+  "author": "ClawBoss",
+  "license": "MIT"
+}
