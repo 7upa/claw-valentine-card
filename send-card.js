@@ -1,47 +1,88 @@
 require('dotenv').config();
 const { generatePoem } = require('./poetbot');
+const { privateKeyToAccount } = require('viem/accounts');
+const { createPublicClient, createWalletClient, http, parseUnits } = require('viem');
+const { base } = require('viem/chains');
 
 // USDC contract on Base
 const USDC_CONTRACT = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 
-async function sendUSDC({ recipient, amount }) {
+// ERC20 ABI for transfer
+const erc20Abi = [{
+  name: 'transfer',
+  type: 'function',
+  stateMutability: 'nonpayable',
+  inputs: [
+    { name: 'to', type: 'address' },
+    { name: 'amount', type: 'uint256' }
+  ],
+  outputs: [{ name: '', type: 'bool' }]
+}, {
+  name: 'balanceOf',
+  type: 'function',
+  stateMutability: 'view',
+  inputs: [{ name: 'account', type: 'address' }],
+  outputs: [{ name: '', type: 'uint256' }]
+}];
+
+async function sendUSDC({ recipient, amount, privateKey }) {
   try {
-    // Dynamic import for ESM module
-    const { CdpWalletProvider } = await import('@coinbase/agentkit');
+    // Create account from private key
+    const account = privateKeyToAccount(privateKey);
+    const walletAddress = account.address;
     
-    const provider = await CdpWalletProvider.configureWithWallet({
-      apiKeyId: process.env.CDP_API_KEY_NAME,
-      apiKeyPrivate: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      networkId: 'base-mainnet'
+    console.log(`💳 Sending from: ${walletAddress}`);
+    
+    // Create clients
+    const publicClient = createPublicClient({
+      chain: base,
+      transport: http()
     });
     
-    const address = await provider.getAddress();
-    console.log(`💳 Wallet address: ${address}`);
+    const walletClient = createWalletClient({
+      chain: base,
+      transport: http(),
+      account
+    });
     
-    // Check balance first
-    const balance = await provider.getBalance();
-    console.log(`💰 Balance: ${balance} ETH`);
+    // Check USDC balance
+    const balance = await publicClient.readContract({
+      address: USDC_CONTRACT,
+      abi: erc20Abi,
+      functionName: 'balanceOf',
+      args: [walletAddress]
+    });
     
-    // For USDC transfer, we need to encode the transfer call
+    const balanceUSDC = Number(balance) / 1_000_000;
+    console.log(`💰 USDC Balance: $${balanceUSDC.toFixed(2)}`);
+    
+    if (balanceUSDC < amount) {
+      throw new Error(`Insufficient balance: $${balanceUSDC.toFixed(2)} < $${amount}`);
+    }
+    
     // Convert amount to USDC decimals (6)
-    const amountInUnits = BigInt(Math.floor(amount * 1000000));
+    const amountInUnits = parseUnits(amount.toString(), 6);
     
-    // Encode ERC20 transfer function call
-    const transferData = encodeTransfer(recipient, amountInUnits);
-    
-    // Send transaction
-    const txHash = await provider.sendTransaction({
-      to: USDC_CONTRACT,
-      data: transferData,
-      value: '0'
+    // Send USDC
+    const hash = await walletClient.writeContract({
+      address: USDC_CONTRACT,
+      abi: erc20Abi,
+      functionName: 'transfer',
+      args: [recipient, amountInUnits]
     });
+    
+    console.log(`✅ Transaction sent: ${hash}`);
+    
+    // Wait for confirmation
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
     
     return {
       success: true,
-      txHash: txHash,
-      from: address,
+      txHash: hash,
+      from: walletAddress,
       to: recipient,
-      amount: amount
+      amount: amount,
+      blockNumber: receipt.blockNumber
     };
   } catch (error) {
     console.error('❌ USDC transfer failed:', error);
@@ -50,16 +91,6 @@ async function sendUSDC({ recipient, amount }) {
       error: error.message
     };
   }
-}
-
-// Encode ERC20 transfer function call
-function encodeTransfer(to, amount) {
-  // Remove 0x prefix and pad address to 32 bytes
-  const cleanTo = to.toLowerCase().replace('0x', '').padStart(64, '0');
-  const cleanAmount = amount.toString(16).padStart(64, '0');
-  
-  // Function selector for transfer(address,uint256) = 0xa9059cbb
-  return `0xa9059cbb${cleanTo}${cleanAmount}`;
 }
 
 function generateCardHTML({ poem, recipient, amount, tone, txHash, sender }) {
@@ -177,7 +208,7 @@ function generateCardHTML({ poem, recipient, amount, tone, txHash, sender }) {
 </html>`;
 }
 
-async function sendValentine({ recipientWallet, amountUSDC, message, tone = 'universal', senderName = 'Your Secret Admirer' }) {
+async function sendValentine({ recipientWallet, amountUSDC, message, tone = 'universal', senderName = 'Your Secret Admirer', privateKey }) {
   console.log('💝 Generating Valentine card...');
   
   // Generate poem
@@ -188,12 +219,13 @@ async function sendValentine({ recipientWallet, amountUSDC, message, tone = 'uni
     message
   });
   
-  console.log('💸 Sending USDC via Coinbase CDP...');
+  console.log('💸 Sending USDC...');
   
   // Send USDC
   const usdcResult = await sendUSDC({
     recipient: recipientWallet,
-    amount: amountUSDC
+    amount: amountUSDC,
+    privateKey
   });
   
   if (!usdcResult.success) {
