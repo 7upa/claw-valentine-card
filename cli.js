@@ -6,6 +6,41 @@ const fs = require('fs');
 // CLI handling
 async function main() {
   const args = process.argv.slice(2);
+  const command = args[0];
+  
+  if (command === 'demo') {
+    // Generate demo cards for each tone
+    console.log('💝 Generating demo cards for all tones...\n');
+    
+    const tones = ['melancholy', 'playful', 'grounded', 'introspective', 'universal'];
+    const { generatePoem } = require('./poetbot');
+    const { generateCardHTML } = require('./send-card');
+    
+    for (const tone of tones) {
+      const poem = generatePoem({
+        tone,
+        recipient: '0xDemo...Wallet',
+        sender: 'ClawCupid',
+        message: 'This is a demo valentine!'
+      });
+      
+      const cardHTML = generateCardHTML({
+        poem,
+        recipient: '0xDemoWallet1234567890',
+        amount: '5.00',
+        tone,
+        txHash: '0x...demo...',
+        sender: 'ClawCupid'
+      });
+      
+      const cardPath = `/tmp/valentine_demo_${tone}.html`;
+      fs.writeFileSync(cardPath, cardHTML);
+      console.log(`✅ ${tone.charAt(0).toUpperCase() + tone.slice(1)} card: ${cardPath}`);
+    }
+    
+    console.log('\n🎨 Open these files in your browser to see the cards!');
+    return;
+  }
   
   if (args.length < 3) {
     console.log(`
@@ -13,6 +48,9 @@ async function main() {
 
 Usage:
   claw-valentine send <recipient_wallet> <amount_usdc> "Your message" --tone=<tone>
+
+Amount:
+  Any amount in USDC (e.g., 0.50, 5.00, 10.00, 100.00)
 
 Tones:
   melancholy   - Restrained longing (In the Mood for Love)
@@ -23,12 +61,11 @@ Tones:
 
 Examples:
   claw-valentine send 0x123... 5.00 "Happy Valentine's Day!" --tone=playful
-  claw-valentine send 0x456... 1.50 "Thinking of you" --tone=melancholy
+  claw-valentine send 0x456... 0.50 "A small token" --tone=melancholy
+  claw-valentine send 0x789... 100.00 "You're amazing!" --tone=universal
     `);
     process.exit(0);
   }
-  
-  const command = args[0];
   
   if (command === 'send') {
     const recipient = args[1];
@@ -38,6 +75,12 @@ Examples:
     // Parse tone from args
     const toneArg = args.find(a => a.startsWith('--tone='));
     const tone = toneArg ? toneArg.replace('--tone=', '') : 'universal';
+    
+    // Validate amount
+    if (isNaN(amount) || amount <= 0) {
+      console.error('❌ Amount must be a positive number');
+      process.exit(1);
+    }
     
     console.log(`💝 Sending ${amount} USDC to ${recipient}...`);
     console.log(`   Tone: ${tone}`);
@@ -65,6 +108,39 @@ Examples:
       console.error('❌ Failed to send:', result.error);
       process.exit(1);
     }
+  }
+  
+  if (command === 'demo') {
+    // Generate demo cards for each tone
+    console.log('💝 Generating demo cards for all tones...\n');
+    
+    const tones = ['melancholy', 'playful', 'grounded', 'introspective', 'universal'];
+    const { generatePoem } = require('./poetbot');
+    const { generateCardHTML } = require('./send-card');
+    
+    for (const tone of tones) {
+      const poem = generatePoem({
+        tone,
+        recipient: '0xDemo...Wallet',
+        sender: 'ClawCupid',
+        message: 'This is a demo valentine!'
+      });
+      
+      const cardHTML = generateCardHTML({
+        poem,
+        recipient: '0xDemoWallet1234567890',
+        amount: '5.00',
+        tone,
+        txHash: '0x...demo...',
+        sender: 'ClawCupid'
+      });
+      
+      const cardPath = `/tmp/valentine_demo_${tone}.html`;
+      fs.writeFileSync(cardPath, cardHTML);
+      console.log(`✅ ${tone.charAt(0).toUpperCase() + tone.slice(1)} card: ${cardPath}`);
+    }
+    
+    console.log('\n🎨 Open these files in your browser to see the cards!');
   }
 }
 
